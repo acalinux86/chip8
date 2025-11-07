@@ -17,8 +17,3 @@ jobs:
       # 3. Compile the Program
       - name: Build the Test Program
         run: make -B
-
-      # 4. Run the Executable
-      - name: Run the program
-        run: ./build/chip8
-        timeout-minutes: 1
