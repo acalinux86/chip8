@@ -21,3 +21,4 @@ jobs:
       # 4. Run the Executable
       - name: Run the program
         run: ./build/chip8
+        timeout-minutes: 1
