@@ -2,4 +2,4 @@
 build/
 
 # CHIP8 ROMS
-*.ch8
+data/
