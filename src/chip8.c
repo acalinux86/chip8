@@ -11,8 +11,12 @@
 #define CHIP8_DW         64     /* Display Width */
 #define CHIP8_DH         32     /* Display Height */
 #define CHIP8_RAM_CAP    1024*4 /* 4096 Addressable Memory */
-#define CHIP8_WINDOW_HEIGHT 800 /* SDL Window Height */
-#define CHIP8_WINDOW_WIDTH  600 /* SDL Window Width */
+
+#define CHIP8_WINDOW_WIDTH  640 /* SDL Window Width */
+#define CHIP8_WINDOW_HEIGHT 320 /* SDL Window Height */
+
+#define CHIP8_PIXEL_WIDTH  (CHIP8_WINDOW_WIDTH/CHIP8_DW)
+#define CHIP8_PIXEL_HEIGHT (CHIP8_WINDOW_HEIGHT/CHIP8_DH)
 
 typedef struct Chip8_Stack {
     uint8_t slots[CHIP8_STACK_CAP];
@@ -37,7 +41,7 @@ uint8_t chip8_read_memory(const uint16_t loc)
     if ((int16_t)loc >= 0 && loc <= CHIP8_RAM_CAP) {
         return chip8_memory[loc];
     } else {
-        fprintf(stderr, "[ERROR] Index `0X%X` Out of Bounds\n", loc);
+        fprintf(stderr, "[PANIC] Index(%u) Out of Bounds for (%d)sized array\n", loc, CHIP8_RAM_CAP);
         exit(EXIT_FAILURE);
     }
 }
@@ -49,7 +53,32 @@ bool chip8_write_memory(const uint16_t loc, uint8_t data)
         chip8_memory[loc] = data;
         return true;
     } else {
-        fprintf(stderr, "[ERROR] Index `0X%X` Out of Bounds\n", loc);
+        fprintf(stderr, "[PANIC] Index(%u) Out of Bounds for (%d)sized array\n", loc, CHIP8_RAM_CAP);
+        return false;
+    }
+}
+
+uint8_t chip8_get_frame_buffer(uint16_t x, uint16_t y)
+{
+    if (((int16_t)x >= 0 && x <= CHIP8_DW) ||
+        ((int16_t)y >= 0 && y <= CHIP8_DW))
+    {
+        return chip8_frame_buffer[x][y];
+    } else {
+        fprintf(stderr, "[PANIC] Index(%u, %u) Out of Bounds For (%d, %d) sized multi-array\n", x, y, CHIP8_DW, CHIP8_DH);
+        exit(EXIT_FAILURE);
+    }
+}
+
+bool chip8_set_frame_buffer(uint16_t x, uint16_t y, uint8_t data)
+{
+    if (((int16_t)x >= 0 && x <= CHIP8_DW) ||
+        ((int16_t)y >= 0 && y <= CHIP8_DW))
+    {
+        chip8_frame_buffer[x][y] = data;
+        return true;
+    } else {
+        fprintf(stderr, "[PANIC] Index(%u, %u) Out of Bounds For (%d, %d) sized multi-array\n", x, y, CHIP8_DW, CHIP8_DH);
         return false;
     }
 }
@@ -384,7 +413,7 @@ bool chip8_read_file_into_memory(const char *chip8_file_path, uint32_t *chip8_fi
     return true;
 }
 
-int main(void)
+int main2(void)
 {
     srand(time(NULL));
     chip8_load_fontset();
@@ -393,14 +422,74 @@ int main(void)
 
     chip8_pc = 0x200; // start of the rom
     bool quit = false;
-    while (!quit) {
-        printf("PC at 0X%X\n", chip8_pc);
-        if (!chip8_execute_opcode()) quit = true;
-    }
+    //while (!quit) {
+        //printf("PC at 0X%X\n", chip8_pc);
+        //if (!chip8_execute_opcode()) quit = true;
+    //}
     return 0;
 }
 
-int main2(void)
+typedef struct Chip8_Color {
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+    uint8_t a;
+} Chip8_Color;
+
+#define CHIP8_SDL_ERROR(error, ret)                                 \
+    do {                                                            \
+        fprintf(stderr, "[ERROR] %s: %s\n", error, SDL_GetError()); \
+        return ret;                                                 \
+    }                                                               \
+    while (0)
+
+static SDL_Renderer *renderer = NULL;
+
+bool chip8_draw_pixel(int x, int y, int w, int h, const Chip8_Color color)
+{
+    const SDL_Rect pixel = {x , y , w , h};
+
+    int ret;
+    ret = SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND); // Set blend mode
+    if (ret != 0) {
+        CHIP8_SDL_ERROR("SDL_SetRenderDrawBlendMode", false);
+    }
+
+    ret = SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a); // Set Pixel Color
+    if (ret != 0) {
+        CHIP8_SDL_ERROR("SDL_SetRenderDrawColor", false);
+    }
+
+    ret = SDL_RenderFillRect(renderer, &pixel);
+    if (ret != 0) {
+        CHIP8_SDL_ERROR("SDL_RenderFillRect", false);
+    }
+
+    ret = SDL_RenderDrawRect(renderer, &pixel);
+    if (ret != 0) {
+        CHIP8_SDL_ERROR("SDL_RenderDrawRect", false);
+    }
+
+    fprintf(stdout, "[INFO] Pixel Size(%d, %d) Rendered at Position(%d, %d)\n", w , h, x, y);
+    return true;
+}
+
+bool chip8_clear_background(const Chip8_Color color)
+{
+    int ret;
+    ret = SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a); // Set Background Color
+    if (ret != 0) {
+        CHIP8_SDL_ERROR("SDL_SetRenderDrawColor", false);
+    }
+
+    ret = SDL_RenderClear(renderer); // Clear Background with Set Color
+    if (ret != 0) {
+        CHIP8_SDL_ERROR("SDL_RenderClear", false);
+    }
+    return true;
+}
+
+int main(void)
 {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "[ERROR] Failed to Initialize SDL: %s\n", SDL_GetError());
@@ -409,20 +498,19 @@ int main2(void)
 
     SDL_Window *window = SDL_CreateWindow("Chip8",
                                           SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                                          CHIP8_WINDOW_HEIGHT, CHIP8_WINDOW_WIDTH,
+                                          CHIP8_WINDOW_WIDTH, CHIP8_WINDOW_HEIGHT,
                                           SDL_WINDOW_RESIZABLE);
     if (window == NULL) {
         fprintf(stderr, "[ERROR] Failed to Create Window: %s\n", SDL_GetError());
         return 1;
     }
 
-    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, 0);
+    renderer = SDL_CreateRenderer(window, -1, 0);
     if (renderer == NULL) {
         fprintf(stderr, "[ERROR] Failed to Create Renderer: %s\n", SDL_GetError());
         return 1;
     }
 
-    int ret;
     bool quit = false;
     while (!quit) {
         SDL_Event event;
@@ -432,21 +520,27 @@ int main2(void)
             }
         }
         // Update
+        const Chip8_Color background = {24, 24, 24, 100}; // background color
+        if (!chip8_clear_background(background)) quit = true;
 
-        ret = SDL_SetRenderDrawColor(renderer, 24, 24, 24, 255); // Set Background Color
-        if (ret != 0) {
-            fprintf(stderr, "[ERROR] SDL_SetRenderDrawColor Failed: %s\n", SDL_GetError());
-            return 1;
-        }
-
-        ret = SDL_RenderClear(renderer); // Clear Background with Set Color
-        if (ret != 0) {
-            fprintf(stderr, "[ERROR] SDL_SetRenderClear Failed: %s\n", SDL_GetError());
-            return 1;
+        for (int i = 0; i < CHIP8_DW; ++i) {
+            for (int j = 0; j < CHIP8_DH; ++j) {
+                if (chip8_get_frame_buffer(i, j) == 1) {
+                    const Chip8_Color color = {255, 255, 255, 100};
+                    int x = i*CHIP8_PIXEL_WIDTH;
+                    int y = j*CHIP8_PIXEL_HEIGHT;
+                    if (!chip8_draw_pixel(x, y, CHIP8_PIXEL_WIDTH, CHIP8_PIXEL_HEIGHT, color)) {
+                        quit = true;
+                        break;
+                    }
+                }
+            }
         }
 
         SDL_RenderPresent(renderer); // Present Background with Changes
+        SDL_Delay(16); // ~60 fps
     }
+
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
