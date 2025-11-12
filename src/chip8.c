@@ -12,8 +12,8 @@
 #define CHIP8_DH         32     /* Display Height */
 #define CHIP8_RAM_CAP    1024*4 /* 4096 Addressable Memory */
 
-#define CHIP8_WINDOW_WIDTH  640 /* SDL Window Width */
-#define CHIP8_WINDOW_HEIGHT 320 /* SDL Window Height */
+#define CHIP8_WINDOW_WIDTH  640*2 /* SDL Window Width */
+#define CHIP8_WINDOW_HEIGHT 320*2 /* SDL Window Height */
 
 #define CHIP8_PIXEL_WIDTH  (CHIP8_WINDOW_WIDTH/CHIP8_DW)
 #define CHIP8_PIXEL_HEIGHT (CHIP8_WINDOW_HEIGHT/CHIP8_DH)
@@ -32,36 +32,13 @@ uint16_t     chip8_pc;                      // Program Counter
 uint8_t chip8_d_timer; // Delay Timer
 uint8_t chip8_s_timer; // Sound Timer
 
-static uint8_t chip8_frame_buffer[CHIP8_DH][CHIP8_DW] = {0}; // Frame Buffer
 static uint8_t chip8_memory[CHIP8_RAM_CAP] = {0};            // Chip8 RAM
-
-uint8_t chip8_read_memory(const uint16_t loc)
-{
-    // casting to int16_t because gcc will just wrap the negative values
-    if ((int16_t)loc >= 0 && loc <= CHIP8_RAM_CAP) {
-        return chip8_memory[loc];
-    } else {
-        fprintf(stderr, "[PANIC] Index(%u) Out of Bounds for (%d)sized array\n", loc, CHIP8_RAM_CAP);
-        exit(EXIT_FAILURE);
-    }
-}
-
-bool chip8_write_memory(const uint16_t loc, uint8_t data)
-{
-    // casting to int16_t because gcc will just wrap the negative values
-    if ((int16_t)loc >= 0 && loc <= CHIP8_RAM_CAP) {
-        chip8_memory[loc] = data;
-        return true;
-    } else {
-        fprintf(stderr, "[PANIC] Index(%u) Out of Bounds for (%d)sized array\n", loc, CHIP8_RAM_CAP);
-        return false;
-    }
-}
+static uint8_t chip8_frame_buffer[CHIP8_DW][CHIP8_DH] = {0}; // Frame Buffer
 
 uint8_t chip8_get_frame_buffer(uint16_t x, uint16_t y)
 {
-    if (((int16_t)x >= 0 && x <= CHIP8_DW) ||
-        ((int16_t)y >= 0 && y <= CHIP8_DW))
+    if (((int16_t)x >= 0 && x < CHIP8_DW) &&
+        ((int16_t)y >= 0 && y < CHIP8_DH))
     {
         return chip8_frame_buffer[x][y];
     } else {
@@ -72,13 +49,41 @@ uint8_t chip8_get_frame_buffer(uint16_t x, uint16_t y)
 
 bool chip8_set_frame_buffer(uint16_t x, uint16_t y, uint8_t data)
 {
-    if (((int16_t)x >= 0 && x <= CHIP8_DW) ||
-        ((int16_t)y >= 0 && y <= CHIP8_DW))
+    if (((int16_t)x >= 0 && x < CHIP8_DW) &&
+        ((int16_t)y >= 0 && y < CHIP8_DH))
     {
         chip8_frame_buffer[x][y] = data;
         return true;
     } else {
         fprintf(stderr, "[PANIC] Index(%u, %u) Out of Bounds For (%d, %d) sized multi-array\n", x, y, CHIP8_DW, CHIP8_DH);
+        return false;
+    }
+}
+
+void chip8_clear_display(void)
+{
+    memset(chip8_frame_buffer, 0, sizeof(chip8_frame_buffer));
+}
+
+uint8_t chip8_read_memory(const uint16_t loc)
+{
+    // casting to int16_t because gcc will just wrap the negative values
+    if ((int16_t)loc >= 0 && loc < CHIP8_RAM_CAP) {
+        return chip8_memory[loc];
+    } else {
+        fprintf(stderr, "[PANIC] Index(%u) Out of Bounds for (%d)sized array\n", loc, CHIP8_RAM_CAP);
+        exit(EXIT_FAILURE);
+    }
+}
+
+bool chip8_write_memory(const uint16_t loc, uint8_t data)
+{
+    // casting to int16_t because gcc will just wrap the negative values
+    if ((int16_t)loc >= 0 && loc < CHIP8_RAM_CAP) {
+        chip8_memory[loc] = data;
+        return true;
+    } else {
+        fprintf(stderr, "[PANIC] Index(%u) Out of Bounds for (%d)sized array\n", loc, CHIP8_RAM_CAP);
         return false;
     }
 }
@@ -105,7 +110,7 @@ bool chip8_stack_push(uint16_t value)
     uint8_t low  = 0; // low
     chip8_split_uint16_t(value, &high, &low); // Split the u16 to u8s
     chip8_stack.slots[chip8_stack.count++] = high; // push high
-    chip8_stack.slots[chip8_stack.count++] = high; // push low
+    chip8_stack.slots[chip8_stack.count++] = low; // push low
 
     return true;
 }
@@ -147,23 +152,27 @@ enum {
 
 #define CHIP8_FONT_HEIGHT 5
 
-const uint8_t chip8_fontset[CHIP8_FONT_COUNT][CHIP8_FONT_HEIGHT] = {
-    [CHIP8_ZERO]  = {0XF0, 0X90, 0X90, 0X90, 0XF0},
-    [CHIP8_ONE]   = {0X20, 0X60, 0X20, 0X20, 0X70},
-    [CHIP8_TWO]   = {0XF0, 0X10, 0XF0, 0X80, 0XF0},
-    [CHIP8_THREE] = {0XF0, 0X10, 0XF0, 0X10, 0XF0},
-    [CHIP8_FOUR]  = {0X90, 0X90, 0XF0, 0X10, 0X10},
-    [CHIP8_FIVE]  = {0XF0, 0X90, 0XF0, 0X10, 0XF0},
-    [CHIP8_SIX]   = {0XF0, 0X80, 0XF0, 0X90, 0XF0},
-    [CHIP8_SEVEN] = {0XF0, 0X10, 0X20, 0X20, 0X40},
-    [CHIP8_EIGHT] = {0XF0, 0X90, 0XF0, 0X90, 0XF0},
-    [CHIP8_NINE]  = {0XF0, 0X90, 0XF0, 0X10, 0XF0},
-    [CHIP8_A]     = {0XF0, 0X90, 0XF0, 0X90, 0X90},
-    [CHIP8_B]     = {0XE0, 0X90, 0XE0, 0X90, 0XE0},
-    [CHIP8_C]     = {0XF0, 0X80, 0X80, 0X80, 0XF0},
-    [CHIP8_D]     = {0XE0, 0X90, 0X90, 0X90, 0XE0},
-    [CHIP8_E]     = {0XF0, 0X80, 0XF0, 0X80, 0XF0},
-    [CHIP8_F]     = {0XF0, 0X80, 0XF0, 0X80, 0X80},
+typedef struct Chip8_Font {
+    uint8_t font[CHIP8_FONT_HEIGHT];
+} Chip8_Font;
+
+const Chip8_Font chip8_fontset[CHIP8_FONT_COUNT] = {
+    [CHIP8_ZERO].font  = {0XF0, 0X90, 0X90, 0X90, 0XF0},
+    [CHIP8_ONE].font   = {0X20, 0X60, 0X20, 0X20, 0X70},
+    [CHIP8_TWO].font   = {0XF0, 0X10, 0XF0, 0X80, 0XF0},
+    [CHIP8_THREE].font = {0XF0, 0X10, 0XF0, 0X10, 0XF0},
+    [CHIP8_FOUR].font  = {0X90, 0X90, 0XF0, 0X10, 0X10},
+    [CHIP8_FIVE].font  = {0XF0, 0X90, 0XF0, 0X10, 0XF0},
+    [CHIP8_SIX].font   = {0XF0, 0X80, 0XF0, 0X90, 0XF0},
+    [CHIP8_SEVEN].font = {0XF0, 0X10, 0X20, 0X20, 0X40},
+    [CHIP8_EIGHT].font = {0XF0, 0X90, 0XF0, 0X90, 0XF0},
+    [CHIP8_NINE].font  = {0XF0, 0X90, 0XF0, 0X10, 0XF0},
+    [CHIP8_A].font     = {0XF0, 0X90, 0XF0, 0X90, 0X90},
+    [CHIP8_B].font     = {0XE0, 0X90, 0XE0, 0X90, 0XE0},
+    [CHIP8_C].font     = {0XF0, 0X80, 0X80, 0X80, 0XF0},
+    [CHIP8_D].font     = {0XE0, 0X90, 0X90, 0X90, 0XE0},
+    [CHIP8_E].font     = {0XF0, 0X80, 0XF0, 0X80, 0XF0},
+    [CHIP8_F].font     = {0XF0, 0X80, 0XF0, 0X80, 0X80},
 };
 
 bool chip8_load_fontset(void)
@@ -171,7 +180,7 @@ bool chip8_load_fontset(void)
     for (uint8_t i = 0; i < CHIP8_FONT_COUNT; ++i) {
         for (uint8_t j = 0; j < CHIP8_FONT_HEIGHT; ++j) {
             uint16_t index = i * CHIP8_FONT_HEIGHT + j;
-            if (!chip8_write_memory(index, chip8_fontset[i][j])) return false;
+            if (!chip8_write_memory(index, chip8_fontset[i].font[j])) return false;
         }
     }
 
@@ -179,18 +188,37 @@ bool chip8_load_fontset(void)
     return true;
 }
 
-void chip8_clear_display(void)
-{
-    memset(chip8_frame_buffer, 0, sizeof(chip8_frame_buffer));
-}
+// Hex Representation of 0 - F Keys
+const uint8_t chip8_keys[CHIP8_FONT_COUNT] = {
+    [CHIP8_ZERO]  = 0x30, // '0'
+    [CHIP8_ONE]   = 0x31, // '1'
+    [CHIP8_TWO]   = 0x32, // '2'
+    [CHIP8_THREE] = 0x33, // '3'
+    [CHIP8_FOUR]  = 0x34, // '4'
+    [CHIP8_FIVE]  = 0x35, // '5'
+    [CHIP8_SIX]   = 0x36, // '6'
+    [CHIP8_SEVEN] = 0x37, // '7'
+    [CHIP8_EIGHT] = 0x38, // '8'
+    [CHIP8_NINE]  = 0x39, // '9'
+    [CHIP8_A]     = 0X61, // 'a'
+    [CHIP8_B]     = 0X62, // 'b'
+    [CHIP8_C]     = 0X63, // 'c'
+    [CHIP8_D]     = 0X64, // 'd'
+    [CHIP8_E]     = 0X65, // 'e'
+    [CHIP8_F]     = 0X66, // 'f'
+};
 
 static inline uint8_t chip8_gen_random_byte()
 {
     return rand() % UINT8_MAX;
 }
 
-bool chip8_execute_opcode()
+bool chip8_execute_opcode(uint16_t start, uint16_t size)
 {
+    if (chip8_pc >= start+size) {
+        printf("Finished\n");
+        return false;
+    }
     uint8_t  high   = chip8_read_memory(chip8_pc);
     uint8_t  low    = chip8_read_memory(chip8_pc+1);
     uint16_t opcode = chip8_bytes_to_uint16_t(high, low);
@@ -335,7 +363,32 @@ bool chip8_execute_opcode()
     case 0XD: {
         // DXYN
         // draw Vx, Vy, nibble, frame[Vx][Vy] = nibble
-        printf("Unimplemented DXYN, DRW Vx, Vy, Nibble: 0X%X\n", opcode);
+        printf("DXYN, DRW Vx, Vy, Nibble: 0X%X\n", opcode);
+        uint8_t vidx_x  = ((opcode >> 8) & 0XF);
+        uint8_t vidx_y  = ((opcode >> 4) & 0XF);
+        uint8_t n_bytes = (opcode & 0XF);
+        uint8_t x       = chip8_vregs[vidx_x];
+        uint8_t y       = chip8_vregs[vidx_y];
+
+        chip8_vregs[0XF] = 0; // Reset V[0XF]
+        for (uint8_t i = 0; i < n_bytes; ++i) {
+            uint8_t sprite_byte = chip8_read_memory(chip8_ir +i);
+            for (uint8_t j = 0; j < 8; ++j) {
+                if ((sprite_byte & (0x80 >> j))) {
+                    uint8_t pixel_x = (x + j) % CHIP8_DW;
+                    uint8_t pixel_y = (y + i) % CHIP8_DH;
+
+                    uint8_t current = chip8_get_frame_buffer(pixel_x, pixel_y);
+
+                    if (current) {
+                        chip8_vregs[0XF] = 1; // Collision
+                    }
+
+                    // Xor the current pixel on screen
+                    if (!chip8_set_frame_buffer(pixel_x, pixel_y, current ^ 1)) return false;
+                }
+            }
+        }
         return true;
     }
 
@@ -357,6 +410,7 @@ bool chip8_execute_opcode()
 
         case 0X29: {
             printf("Unimplemented: Fx29, LD F, Vx: 0X%X\n", opcode);
+                        uint8_t v_index  = ((opcode >> 8) & 0XF);
             return true;
         }
 
@@ -408,25 +462,11 @@ bool chip8_read_file_into_memory(const char *chip8_file_path, uint32_t *chip8_fi
         return false;
     }
 
+    if (!chip8_write_memory(0x200+(uint16_t)bytes, 0)) return false;
+
     *chip8_file_size = size;
     fclose(fp); // close file pointer
     return true;
-}
-
-int main2(void)
-{
-    srand(time(NULL));
-    chip8_load_fontset();
-    uint32_t size = 0;
-    if (!chip8_read_file_into_memory("data/RPS.ch8", &size)) return 1;
-
-    chip8_pc = 0x200; // start of the rom
-    bool quit = false;
-    //while (!quit) {
-        //printf("PC at 0X%X\n", chip8_pc);
-        //if (!chip8_execute_opcode()) quit = true;
-    //}
-    return 0;
 }
 
 typedef struct Chip8_Color {
@@ -443,9 +483,7 @@ typedef struct Chip8_Color {
     }                                                               \
     while (0)
 
-static SDL_Renderer *renderer = NULL;
-
-bool chip8_draw_pixel(int x, int y, int w, int h, const Chip8_Color color)
+bool chip8_draw_pixel(SDL_Renderer *renderer, int x, int y, int w, int h, const Chip8_Color color)
 {
     const SDL_Rect pixel = {x , y , w , h};
 
@@ -465,16 +503,11 @@ bool chip8_draw_pixel(int x, int y, int w, int h, const Chip8_Color color)
         CHIP8_SDL_ERROR("SDL_RenderFillRect", false);
     }
 
-    ret = SDL_RenderDrawRect(renderer, &pixel);
-    if (ret != 0) {
-        CHIP8_SDL_ERROR("SDL_RenderDrawRect", false);
-    }
-
     fprintf(stdout, "[INFO] Pixel Size(%d, %d) Rendered at Position(%d, %d)\n", w , h, x, y);
     return true;
 }
 
-bool chip8_clear_background(const Chip8_Color color)
+bool chip8_clear_background(SDL_Renderer *renderer,const Chip8_Color color)
 {
     int ret;
     ret = SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a); // Set Background Color
@@ -489,8 +522,44 @@ bool chip8_clear_background(const Chip8_Color color)
     return true;
 }
 
-int main(void)
+bool chip8_render_pixels(SDL_Renderer *renderer)
 {
+    for (int j = 0; j < CHIP8_DH; ++j) {
+        for (int i = 0; i < CHIP8_DW; ++i) {
+            if (chip8_get_frame_buffer(i, j)) {
+                const Chip8_Color color = {255, 255, 255, 100};
+                int x = i*CHIP8_PIXEL_WIDTH;
+                int y = j*CHIP8_PIXEL_HEIGHT;
+                if (chip8_draw_pixel(renderer, x, y, CHIP8_PIXEL_WIDTH, CHIP8_PIXEL_HEIGHT, color)) {
+                    ;
+                } else {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+const char *chip8_shift_args(int *argc, char ***argv)
+{
+    const char *result = **argv;
+    (*argc)--;
+    (*argv)++;
+    return result;
+}
+
+int main(int argc, char **argv)
+{
+    // Parse Command-Line Args
+    const char *program_name = chip8_shift_args(&argc, &argv);
+    if (argc <= 0) {
+        fprintf(stderr, "[Usage] %s <input_path>\n", program_name);
+        return 1;
+    }
+
+    const char *rom_path = chip8_shift_args(&argc, &argv);
+
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "[ERROR] Failed to Initialize SDL: %s\n", SDL_GetError());
         return 1; // Exit if Error
@@ -505,11 +574,19 @@ int main(void)
         return 1;
     }
 
-    renderer = SDL_CreateRenderer(window, -1, 0);
+    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, 0);
     if (renderer == NULL) {
         fprintf(stderr, "[ERROR] Failed to Create Renderer: %s\n", SDL_GetError());
         return 1;
     }
+
+    srand(time(NULL));
+    chip8_load_fontset();
+    chip8_clear_display();
+    uint32_t size = 0;
+    if (!chip8_read_file_into_memory(rom_path, &size)) return 1;
+    chip8_ir = 0x00;
+    chip8_pc = 0x200; // start of the rom
 
     bool quit = false;
     while (!quit) {
@@ -521,22 +598,11 @@ int main(void)
         }
         // Update
         const Chip8_Color background = {24, 24, 24, 100}; // background color
-        if (!chip8_clear_background(background)) quit = true;
+        if (!chip8_clear_background(renderer, background)) quit = true;
 
-        for (int i = 0; i < CHIP8_DW; ++i) {
-            for (int j = 0; j < CHIP8_DH; ++j) {
-                if (chip8_get_frame_buffer(i, j) == 1) {
-                    const Chip8_Color color = {255, 255, 255, 100};
-                    int x = i*CHIP8_PIXEL_WIDTH;
-                    int y = j*CHIP8_PIXEL_HEIGHT;
-                    if (!chip8_draw_pixel(x, y, CHIP8_PIXEL_WIDTH, CHIP8_PIXEL_HEIGHT, color)) {
-                        quit = true;
-                        break;
-                    }
-                }
-            }
-        }
-
+        printf("PC at 0X%X\n", chip8_pc);
+        if (!chip8_execute_opcode(0x200, size)) quit = true;
+        if (!chip8_render_pixels(renderer))  quit = true;
         SDL_RenderPresent(renderer); // Present Background with Changes
         SDL_Delay(16); // ~60 fps
     }
@@ -549,3 +615,4 @@ int main(void)
 }
 
 // TODO: Continue Implementing the Opcodes
+// TODO: Give a more detailed Usage

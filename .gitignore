@@ -1,5 +1,2 @@
 # Ignore Build Directory
 build/
-
-# CHIP8 ROMS
-data/
