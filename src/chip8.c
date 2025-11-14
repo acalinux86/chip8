@@ -189,7 +189,7 @@ bool chip8_load_fontset(void)
     return true;
 }
 
-// Hex Representation of 0 - F Keys
+// SDL Representation of 0 - F Keys
 const SDL_Keycode chip8_keys[CHIP8_FONT_COUNT] = {
     [CHIP8_ZERO]  = SDLK_0,
     [CHIP8_ONE]   = SDLK_1,
@@ -244,97 +244,6 @@ void chip8_handle_input(SDL_Event *event)
     }
 }
 
-/*bool chip8_handle_input(Chip8_Keys *key)
-{
-    switch (*key) {
-    case CHIP8_ZERO: {
-        *key = CHIP8_ZERO;
-        return true;
-    }
-
-    case CHIP8_ONE: {
-        *key = CHIP8_ONE;
-        return true;
-    }
-
-    case CHIP8_TWO: {
-        *key = CHIP8_TWO;
-        return true;
-    }
-
-    case CHIP8_THREE: {
-        *key = CHIP8_THREE;
-        return true;
-    }
-
-    case CHIP8_FOUR: {
-        *key = CHIP8_FOUR;
-        return true;
-    }
-
-    case CHIP8_FIVE: {
-        *key = CHIP8_FIVE;
-        return true;
-    }
-
-    case CHIP8_SIX: {
-        *key = CHIP8_SIX;
-        return true;
-    }
-
-    case CHIP8_SEVEN: {
-        *key = CHIP8_SEVEN;
-        return true;
-    }
-
-    case CHIP8_EIGHT: {
-        *key = CHIP8_EIGHT;
-        return true;
-    }
-
-    case CHIP8_NINE: {
-        *key = CHIP8_NINE;
-        return true;
-    }
-
-    case CHIP8_A: {
-        *key = CHIP8_A;
-        return true;
-    }
-
-    case CHIP8_B: {
-        *key = CHIP8_B;
-        return true;
-    }
-
-    case CHIP8_C: {
-        *key = CHIP8_C;
-        return true;
-    }
-
-    case CHIP8_D: {
-        *key = CHIP8_D;
-        return true;
-    }
-
-    case CHIP8_E: {
-        *key = CHIP8_E;
-        return true;
-    }
-
-    case CHIP8_F: {
-        *key = CHIP8_F;
-        return true;
-    }
-
-    default:
-        fprintf(stderr, "[PANIC] Unreachable Key\n");
-        return false;
-    }
-    fprintf(stderr, "[PANIC] Unreachable Event Type\n");
-    return false;
-}
-*/
 bool chip8_execute_opcode(uint16_t start, uint16_t size)
 {
     if (chip8_pc >= start+size) {
