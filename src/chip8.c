@@ -623,8 +623,7 @@ int main(int argc, char **argv)
     }
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
-        fprintf(stderr, "[ERROR] Failed to Initialize SDL: %s\n", SDL_GetError());
-        return 1; // Exit if Error
+        CHIP8_SDL_ERROR("Failed to Initialize SDL", 1);
     }
 
     const char *prefix     = "Chip8";
@@ -643,14 +642,12 @@ int main(int argc, char **argv)
                                           CHIP8_WINDOW_WIDTH, CHIP8_WINDOW_HEIGHT,
                                           SDL_WINDOW_RESIZABLE);
     if (window == NULL) {
-        fprintf(stderr, "[ERROR] Failed to Create Window: %s\n", SDL_GetError());
-        return 1;
+        CHIP8_SDL_ERROR("Failed to Create Window", 1);
     }
 
     SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, 0);
     if (renderer == NULL) {
-        fprintf(stderr, "[ERROR] Failed to Create Renderer: %s\n", SDL_GetError());
-        return 1;
+        CHIP8_SDL_ERROR("Failed to Create Renderer", 1);
     }
 
     size_t size = 0;
@@ -672,10 +669,9 @@ int main(int argc, char **argv)
         printf("PC at 0X%X\n", chip8_pc);
         if (!chip8_execute_opcode(CHIP8_PROGRAM_ENTRY, size)) quit = true;
         if (!chip8_render_pixels(renderer))  quit = true;
-        SDL_RenderPresent(renderer); // Present Background with Changes
+        SDL_RenderPresent(renderer); // Present Frame with Changes
         SDL_Delay(16); // ~60 fps
     }
-
 
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
