@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 #include <errno.h>
 #include <time.h>
@@ -62,6 +64,28 @@ typedef struct Chip8_Sound {
     SDL_AudioDeviceID dev;
 } Chip8_Sound;
 
+typedef enum Chip8_Keys {
+    CHIP8_ZERO = 0x0,
+    CHIP8_ONE,
+    CHIP8_TWO,
+    CHIP8_THREE,
+    CHIP8_FOUR,
+    CHIP8_FIVE,
+    CHIP8_SIX,
+    CHIP8_SEVEN,
+    CHIP8_EIGHT,
+    CHIP8_NINE,
+    CHIP8_A = 0xA,
+    CHIP8_B = 0xB,
+    CHIP8_C = 0xC,
+    CHIP8_D = 0xD,
+    CHIP8_E = 0XE,
+    CHIP8_F = 0XF,
+
+    // Font Count
+    CHIP8_FONT_COUNT
+} Chip8_Keys;
+
 typedef struct Chip8_CPU {
     uint8_t  chip8_vregs[CHIP8_VREG_COUNT];          // Registers V0 - V15
     uint16_t chip8_ir;                               // Index register
@@ -72,6 +96,7 @@ typedef struct Chip8_CPU {
 
     uint8_t  chip8_memory[CHIP8_RAM_CAP];            // Chip8 RAM
     uint8_t  chip8_frame_buffer[CHIP8_DW][CHIP8_DH]; // Frame Buffer
+    bool     chip8_key_state[CHIP8_FONT_COUNT];      // ALL false
 
     Chip8_Stack  chip8_stack;                        // 16-Byte Stack
     Chip8_Sound  sound;                              // Beep Sound
@@ -89,28 +114,6 @@ typedef struct Chip8_Color {
 #define RED   (Chip8_Color){255, 0,     0, 255}
 #define GREEN (Chip8_Color){0,   255,   0, 255}
 #define BLUE  (Chip8_Color){0,   0,   255, 255}
-
-typedef enum Chip8_Keys {
-    CHIP8_ZERO = 0,
-    CHIP8_ONE,
-    CHIP8_TWO,
-    CHIP8_THREE,
-    CHIP8_FOUR,
-    CHIP8_FIVE,
-    CHIP8_SIX,
-    CHIP8_SEVEN,
-    CHIP8_EIGHT,
-    CHIP8_NINE,
-    CHIP8_A,
-    CHIP8_B,
-    CHIP8_C,
-    CHIP8_D,
-    CHIP8_E,
-    CHIP8_F,
-
-    // Font Count
-    CHIP8_FONT_COUNT
-} Chip8_Keys;
 
 typedef struct Chip8_Font {
     uint8_t font[CHIP8_FONT_HEIGHT];
@@ -199,7 +202,7 @@ bool chip8_open_audio_device(Chip8_CPU *cpu)
     return true;
 }
 
-uint8_t chip8_read_memory(Chip8_CPU *cpu, const uint16_t loc)
+uint8_t chip8_read_memory(const Chip8_CPU *cpu, const uint16_t loc)
 {
     // casting to int16_t because gcc will just wrap the negative values
     if ((int16_t)loc >= 0 && loc < CHIP8_RAM_CAP) {
@@ -239,22 +242,22 @@ bool chip8_load_fontset(Chip8_CPU *cpu)
 
 // SDL Representation of 0 - F Keys
 const SDL_Keycode chip8_keys[CHIP8_FONT_COUNT] = {
-    [CHIP8_ZERO]  = SDLK_0,
+    [CHIP8_ZERO]  = SDLK_x,
     [CHIP8_ONE]   = SDLK_1,
     [CHIP8_TWO]   = SDLK_2,
     [CHIP8_THREE] = SDLK_3,
-    [CHIP8_FOUR]  = SDLK_4,
-    [CHIP8_FIVE]  = SDLK_5,
-    [CHIP8_SIX]   = SDLK_6,
-    [CHIP8_SEVEN] = SDLK_7,
-    [CHIP8_EIGHT] = SDLK_8,
-    [CHIP8_NINE]  = SDLK_9,
-    [CHIP8_A]     = SDLK_a,
-    [CHIP8_B]     = SDLK_b,
-    [CHIP8_C]     = SDLK_c,
-    [CHIP8_D]     = SDLK_d,
-    [CHIP8_E]     = SDLK_e,
-    [CHIP8_F]     = SDLK_f
+    [CHIP8_FOUR]  = SDLK_q,
+    [CHIP8_FIVE]  = SDLK_w,
+    [CHIP8_SIX]   = SDLK_e,
+    [CHIP8_SEVEN] = SDLK_a,
+    [CHIP8_EIGHT] = SDLK_s,
+    [CHIP8_NINE]  = SDLK_d,
+    [CHIP8_A]     = SDLK_z,
+    [CHIP8_B]     = SDLK_c,
+    [CHIP8_C]     = SDLK_4,
+    [CHIP8_D]     = SDLK_r,
+    [CHIP8_E]     = SDLK_f,
+    [CHIP8_F]     = SDLK_v,
 };
 
 uint8_t chip8_get_frame_buffer(Chip8_CPU *cpu, uint16_t x, uint16_t y)
@@ -332,15 +335,13 @@ static inline uint8_t chip8_gen_random_byte()
     return (uint8_t)(rand() % (UINT8_MAX + 1));
 }
 
-static bool chip8_key_state[CHIP8_FONT_COUNT] = {0}; // ALL false
-
-void chip8_handle_input(SDL_Event *event)
+void chip8_handle_input(Chip8_CPU *cpu, SDL_Event *event)
 {
     switch (event->type) {
     case SDL_KEYDOWN: {
         for (uint8_t i = 0; i < CHIP8_FONT_COUNT; ++i) {
             if (event->key.keysym.sym == chip8_keys[i]) {
-                chip8_key_state[i] = true;
+                cpu->chip8_key_state[i] = true;
                 break;
             }
         }
@@ -349,7 +350,7 @@ void chip8_handle_input(SDL_Event *event)
     case SDL_KEYUP: {
         for (uint8_t i = 0; i < CHIP8_FONT_COUNT; ++i) {
             if (event->key.keysym.sym == chip8_keys[i]) {
-                chip8_key_state[i] = false;
+                cpu->chip8_key_state[i] = false;
                 break;
             }
         }
@@ -500,11 +501,66 @@ bool chip8_execute_opcode(Chip8_CPU *cpu, uint16_t start, uint16_t size)
             return true;
         }
 
+        case 0x1: {
+#if CHIP8_DEBUG_OPCODE
+            printf("8xy1, OR Vx, Vy: 0X%X\n", opcode);
+#endif
+            cpu->chip8_vregs[vidx_x] = cpu->chip8_vregs[vidx_x] | cpu->chip8_vregs[vidx_y];
+            return true;
+        }
+
         case 0x2: {
 #if CHIP8_DEBUG_OPCODE
             printf("8xy2, AND Vx, Vy: 0X%X\n", opcode);
 #endif
             cpu->chip8_vregs[vidx_x] = cpu->chip8_vregs[vidx_x] & cpu->chip8_vregs[vidx_y];
+            return true;
+        }
+
+        case 0x3: {
+#if CHIP8_DEBUG_OPCODE
+            printf("8xy3, XOR Vx, Vy: 0X%X\n", opcode);
+#endif
+            cpu->chip8_vregs[vidx_x] = cpu->chip8_vregs[vidx_x] ^ cpu->chip8_vregs[vidx_y];
+            return true;
+        }
+
+        case 0x4: {
+#if CHIP8_DEBUG_OPCODE
+            printf("8xy4, ADD Vx, Vy: 0X%X\n", opcode);
+#endif
+            uint16_t value = (uint16_t) cpu->chip8_vregs[vidx_x] + (uint16_t) cpu->chip8_vregs[vidx_y];
+            uint8_t high;
+            uint8_t low;
+            chip8_split_uint16_t(value, &high, &low);
+            if (value > UINT8_MAX) {
+                cpu->chip8_vregs[0XF] = 1;
+            } else {
+                cpu->chip8_vregs[0XF] = 0;
+            }
+            cpu->chip8_vregs[vidx_x] = low;
+            return true;
+        }
+
+        case 0x5: {
+#if CHIP8_DEBUG_OPCODE
+            printf("8xy5, SUB Vx, Vy: 0X%X\n", opcode);
+#endif
+            if (cpu->chip8_vregs[vidx_x] > cpu->chip8_vregs[vidx_y]) {
+                cpu->chip8_vregs[0XF] = 1;
+            } else {
+                cpu->chip8_vregs[0XF] = 0;
+            }
+            cpu->chip8_vregs[vidx_x] -= cpu->chip8_vregs[vidx_y];
+            return true;
+        }
+
+        case 0x6: {
+#if CHIP8_DEBUG_OPCODE
+            printf("8xy6, SHR Vx {, Vy}: 0X%X\n", opcode);
+#endif
+            cpu->chip8_vregs[0XF] = cpu->chip8_vregs[vidx_x] & 0x01; // set
+            cpu->chip8_vregs[vidx_x] >>= 1;
             return true;
         }
 
@@ -544,6 +600,18 @@ bool chip8_execute_opcode(Chip8_CPU *cpu, uint16_t start, uint16_t size)
 
         fprintf(stderr, "[PANIC] Unreachable\n");
         return false;
+    }
+
+    case 0x9: {
+        // 9xy0 - SNE Vx, Vy
+        uint8_t vidx_x   = ((opcode >> 8) & 0XF); // 2nd nibble , x index into v
+        uint8_t vidx_y   = ((opcode >> 4) & 0XF); // 3rd nibble , y index into v
+        if (cpu->chip8_vregs[vidx_x] != cpu->chip8_vregs[vidx_y]) {
+            cpu->chip8_pc += 2; // Skip increment by two
+        } else {
+            ;
+        }
+        return true;
     }
 
     case 0XA: {
@@ -610,7 +678,7 @@ bool chip8_execute_opcode(Chip8_CPU *cpu, uint16_t start, uint16_t size)
 #endif
         uint8_t v_index  = ((opcode >> 8) & 0XF);
         uint8_t key = cpu->chip8_vregs[v_index];
-        if (chip8_key_state[key]) {
+        if (cpu->chip8_key_state[key]) {
             cpu->chip8_pc += 2;
         } else {
             ;
@@ -639,7 +707,7 @@ bool chip8_execute_opcode(Chip8_CPU *cpu, uint16_t start, uint16_t size)
             // put keycode in V[x]
             bool pressed = false;
             for (uint8_t i = 0; i < CHIP8_FONT_COUNT; ++i) {
-                if (chip8_key_state[i]) {
+                if (cpu->chip8_key_state[i]) {
                     cpu->chip8_vregs[v_index] = i;
                     pressed = true;
                     break;
@@ -670,6 +738,13 @@ bool chip8_execute_opcode(Chip8_CPU *cpu, uint16_t start, uint16_t size)
             cpu->chip8_d_timer = cpu->chip8_vregs[v_index];
             return true;
         }
+        case 0x18: {
+#if CHIP8_DEBUG_OPCODE
+            printf("Fx18 - LD ST, Vx\n");
+#endif
+            cpu->chip8_s_timer = cpu->chip8_vregs[v_index];
+            return true;
+        }
 
         case 0X29: {
 #if CHIP8_DEBUG_OPCODE
@@ -695,12 +770,23 @@ bool chip8_execute_opcode(Chip8_CPU *cpu, uint16_t start, uint16_t size)
             return true;
         }
 
+        case 0x55: {
+#if CHIP8_DEBUG_OPCODE
+            printf("Fx55 - LD [I], Vx\n");
+#endif
+            for (uint8_t i = 0; i <= v_index; ++i) {
+                if (!chip8_write_memory(cpu, cpu->chip8_ir + (uint16_t)i, cpu->chip8_vregs[i])) return false;
+            }
+            cpu->chip8_ir = cpu->chip8_ir + v_index + 1;
+            return true;
+        }
+
         case 0x65: {
 #if CHIP8_DEBUG_OPCODE
             printf("Fx65 - LD Vx, [I]\n");
 #endif
-            for (uint8_t i = 0; i < v_index; ++i) {
-                cpu->chip8_vregs[v_index + i] = chip8_read_memory(cpu, cpu->chip8_ir + i);
+            for (uint8_t i = 0; i <= v_index; ++i) {
+                cpu->chip8_vregs[i] = chip8_read_memory(cpu, cpu->chip8_ir + (uint16_t)i);
             }
             cpu->chip8_ir = cpu->chip8_ir + v_index + 1;
             return true;
@@ -947,9 +1033,7 @@ int chip8_main(int argc, char **argv)
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
             case SDL_QUIT: quit = true; break;
-            case SDL_KEYUP:
-            case SDL_KEYDOWN:
-                chip8_handle_input(&event); break;
+            chip8_handle_input(&cpu, &event); break;
             }
         }
         // Update
